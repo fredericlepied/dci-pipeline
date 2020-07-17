@@ -14,15 +14,15 @@
 
       - name: Print job id
         debug:
-          msg: "dci_job_id: {{ job_info['job']['id'] }}"
+          msg: "dci_job_id: {{ job_info.job.id }}"
 
       - name: 'Set global variables'
         set_fact:
-          job_id: "{{ job_info['job']['id'] }}"
-          topic_id: "{{ job_info['job']['topic_id'] }}"
-          remoteci_id: "{{ job_info['job']['remoteci_id'] }}"
-          components: "{{ job_info['job']['components'] }}"
-          product: "{{ job_info['job']['topic']['product_id'] }}"
+          job_id: "{{ job_info.job.id }}"
+          topic_id: "{{ job_info.job.topic_id }}"
+          remoteci_id: "{{ job_info.job.remoteci_id }}"
+          components: "{{ job_info.job.components }}"
+          product: "{{ job_info.job.topic.product_id }}"
 
       - name: 'Set tags for the current job'
         dci_job:
@@ -35,11 +35,24 @@
     vars:
       dci_status: "pre-run"
     tasks:
+
+      - name: get OCP version from job_info
+        set_fact:
+          ocp_version: "{{ item.name }}"
+        with_items: "{{ job_info.job.components }}"
+        when: item["type"] == "ocp"
+
       - name: do some checks
         assert:
-          success_msg: "All components are present"
+          success_msg: "All components are present and ocp_version is defined"
+          fail_msg: "There are missing components or ocp_version cannot be found"
           that:
             - "components|length == 3"
+            - ocp_version is defined
+
+      - name: display ocp_version
+        debug:
+          msg: "OCP version {{ ocp_version }}"
 
   - name: Running ocp deployment
     hosts: localhost
@@ -49,6 +62,11 @@
     tasks:
       - name: install ocp
         shell: echo 'installing some ocp here'
+
+      - name: fail on ocp-4.4-4.4.0-0.nightly-20200703
+        fail:
+          msg: 'ocp-4.4.0-0.nightly-20200703 is buggy'
+        when: ocp_version == "ocp-4.4.0-0.nightly-20200703"
 
   - name: Post-run tasks
     hosts: localhost
@@ -69,4 +87,4 @@
     tasks:
       - name: success message
         debug:
-          msg: 'The job is now finished. Review the log at: https://www.distributed-ci.io/jobs/{{ hostvars.localhost.job_info.job.id }}/jobStates'
+          msg: 'The job is now finished. Review the log at: {{ dci_cs_url }}/jobs/{{ hostvars.localhost.job_info.job.id }}/jobStates'
